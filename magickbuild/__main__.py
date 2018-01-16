@@ -18,8 +18,13 @@ def main(argv):
     if len(argv) == 1 or argv[1].startswith('-'):
         # detect project dir
         for dirname in os.listdir('.'):
-            if os.path.isdir(dirname) and os.path.exists(os.path.join(dirname, 'settings')):
+            has_settings = (
+                os.path.exists(os.path.join(dirname, 'settings'))
+                or os.path.exists(os.path.join(dirname, 'settings.py'))
+            )
+            if os.path.isdir(dirname) and has_settings:
                 project_dir = dirname
+        assert project_dir
     else:
         project_dir = argv[1]
 
