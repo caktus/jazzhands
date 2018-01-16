@@ -58,14 +58,14 @@ def main(argv):
     for root, dirs, files in os.walk(project_dir):
         if 'node_modules' in root:
             continue
-        if 'index.js' in files:
+        if 'index.js' in files and 'js' not in index_files:
             print('JavaScript', root)
             index_files['js'] = os.path.join(root, 'index.js')
-        if 'index.styl' in files:
+        if 'index.styl' in files and 'styl' not in index_files:
             print('Stylus', root)
             index_files['styl'] = os.path.join(root, 'index.styl')
             stylus_dir = root
-        if 'index.less' in files:
+        if 'index.less' in files and 'less' not in index_files:
             print('Less', root)
             index_files['less'] = os.path.join(root, 'index.less')
         if root.endswith('static/css'):
@@ -107,13 +107,19 @@ def main(argv):
         collect_app_asset_src('js')
         p = subprocess.Popen(['browserify', index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')], stderr=subprocess.PIPE)
         out, err = p.communicate()
+
         if p.returncode > 0:
-            err = err.decode('ascii')
-            m = re.search(r"Cannot find module '(.*)' from", err)
-            if m:
-                missing_dep = m.groups()[0]
-                subprocess.run(['npm', 'install', '--save', missing_dep])
-                build_js()
+            if '--auto-npm' in argv:
+                err = err.decode('ascii')
+                m = re.search(r"Cannot find module '(.*)' from", err)
+                if m:
+                    missing_dep = m.groups()[0]
+                    subprocess.run(['npm', 'install', '--save', missing_dep])
+                    build_js()
+            else:
+                print(out)
+                print('---')
+                print(err)
 
     if index_files.get('styl') and index_files.get('less'):
         print("ERROR: I don't know how to combine Stylus and Less in a single build... yet!")
