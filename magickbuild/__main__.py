@@ -4,6 +4,7 @@ import time
 import subprocess
 from io import StringIO
 from distutils.dir_util import copy_tree
+from shutil import rmtree
 
 lang_dir_names = {
     'js': 'js',
@@ -12,8 +13,78 @@ lang_dir_names = {
     'styl': 'stylus',
 }
 
+index_files = {}
+
+css_dir = None
+js_dir = None
+
+stylus_watch = {}
+js_watch = {}
+
+app_asset_dirs = {}
+
+def pull_app_assets(from_path, to_path):
+    # copy_tree(from_path, to_path)
+    if os.path.islink(to_path):
+        os.unlink(to_path)
+    elif os.path.exists(to_path):
+        rmtree(to_path)
+    os.symlink(from_path, to_path)
+
+def record_app_asset_dir(dirs, root, lang):
+    dir_name = lang_dir_names[lang]
+    app_js_index = os.path.join(root, 'static', dir_name, 'index.%s' % lang)
+    app_js_dir = os.path.join(root, 'static', dir_name)
+    app_name = os.path.split(root)[-1]
+    if os.path.exists(app_js_index):
+        dirs.setdefault(lang, [])
+        dirs[lang].append((app_name, app_js_dir))
+
+def collect_app_asset_src(dirs, lang):
+    for (app_name, app_asset_dir) in dirs[lang]:
+        dest_dir = os.path.join(os.path.dirname(index_files[lang]), app_name)
+        
+        print("collecting assets", app_name, lang, app_asset_dir, '->', dest_dir)
+
+        os.makedirs(os.path.join(js_dir, app_name), exist_ok=True)
+        pull_app_assets(app_asset_dir, dest_dir)
+
+def build_stylus(dirs):
+    print("Building Stylus")
+    collect_app_asset_src(dirs, 'styl')
+    in_file = open(index_files['styl'], 'r')
+    out_file = open(os.path.join(css_dir, 'bundle.css'), 'w')
+    stylus_dir = os.path.dirname(index_files['styl'])
+    subprocess.call(['stylus', '--resolve-url'], cwd=stylus_dir, stdin=in_file, stdout=out_file)
+
+def build_less(dirs):
+    print("Building Less")
+    collect_app_asset_src(dirs, 'less')
+    subprocess.call(['lessc', index_files['less'], os.path.join(css_dir, 'bundle.css')])
+
+def build_js(dirs):
+    print("Building JS")
+    collect_app_asset_src(dirs, 'js')
+    p = subprocess.Popen(['browserify', index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')], stderr=subprocess.PIPE)
+    out, err = p.communicate()
+
+    if p.returncode > 0:
+        if '--auto-npm' in argv:
+            err = err.decode('ascii')
+            m = re.search(r"Cannot find module '(.*)' from", err)
+            if m:
+                missing_dep = m.groups()[0]
+                subprocess.run(['npm', 'install', '--save', missing_dep])
+                build_js()
+        else:
+            print(out)
+            print('---')
+            print(err)
 
 def main(argv):
+    global js_dir
+    global css_dir
+
     project_dir = None
     if len(argv) == 1 or argv[1].startswith('-'):
         # detect project dir
@@ -28,28 +99,7 @@ def main(argv):
     else:
         project_dir = argv[1]
 
-    index_files = {}
-
-    css_dir = None
-    js_dir = None
-
-    stylus_watch = {}
-    js_watch = {}
-
-    app_asset_dirs = {}
-
     # Look through all the Python paths for packages with static files in them
-
-    def record_app_asset_dir(lang):
-        dir_name = lang_dir_names[lang]
-        app_js_index = os.path.join(root, 'static', dir_name, 'index.%s' % lang)
-        app_js_dir = os.path.join(root, 'static', dir_name)
-        app_name = os.path.split(root)[-1]
-        if os.path.exists(app_js_index):
-            print(app_name, lang, app_js_index)
-            app_asset_dirs.setdefault(lang, [])
-            app_asset_dirs[lang].append((app_name, app_js_dir))
-
     for path in sys.path:
         for root, dirs, files in os.walk(path):
             if ".tox" in root or 'node_modules' in root or ".git" in root:
@@ -57,10 +107,11 @@ def main(argv):
             if os.path.relpath(root).split('/', 1)[0] == os.path.relpath(project_dir):
                 continue
             if 'lib/python' not in root or 'site-packages' in root:
-                record_app_asset_dir('js')
-                record_app_asset_dir('styl')
+                record_app_asset_dir(app_asset_dirs, root, 'js')
+                record_app_asset_dir(app_asset_dirs, root, 'styl')
 
-    for root, dirs, files in os.walk(project_dir):
+    # Find all the asset files in the project itself
+    for root, dirs, files in os.walk(project_dir, followlinks=True):
         if 'node_modules' in root:
             continue
         if 'index.js' in files and 'js' not in index_files:
@@ -69,7 +120,6 @@ def main(argv):
         if 'index.styl' in files and 'styl' not in index_files:
             print('Stylus', root)
             index_files['styl'] = os.path.join(root, 'index.styl')
-            stylus_dir = root
         if 'index.less' in files and 'less' not in index_files:
             print('Less', root)
             index_files['less'] = os.path.join(root, 'index.less')
@@ -87,56 +137,18 @@ def main(argv):
             if fn.endswith('.js'):
                 fn = os.path.join(root, fn)
                 js_watch[fn] = os.stat(fn).st_mtime
-            
-    def collect_app_asset_src(lang):
-        for (app_name, app_asset_dir) in app_asset_dirs[lang]:
-            os.makedirs(os.path.join(js_dir, app_name), exist_ok=True)
-            dest_dir = os.path.join(os.path.dirname(index_files[lang]), app_name)
-            copy_tree(app_asset_dir, dest_dir)
-            print("copying", app_name, lang, app_asset_dir, '->', dest_dir)
-    
-    def build_stylus():
-        print("Building Stylus")
-        collect_app_asset_src('styl')
-        in_file = open(index_files['styl'], 'r')
-        out_file = open(os.path.join(css_dir, 'bundle.css'), 'w')
-        subprocess.call(['stylus'], cwd=stylus_dir, stdin=in_file, stdout=out_file)
-
-    def build_less():
-        print("Building Less")
-        collect_app_asset_src('less')
-        subprocess.call(['lessc', index_files['less'], os.path.join(css_dir, 'bundle.css')])
-    
-    def build_js():
-        print("Building JS")
-        collect_app_asset_src('js')
-        p = subprocess.Popen(['browserify', index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')], stderr=subprocess.PIPE)
-        out, err = p.communicate()
-
-        if p.returncode > 0:
-            if '--auto-npm' in argv:
-                err = err.decode('ascii')
-                m = re.search(r"Cannot find module '(.*)' from", err)
-                if m:
-                    missing_dep = m.groups()[0]
-                    subprocess.run(['npm', 'install', '--save', missing_dep])
-                    build_js()
-            else:
-                print(out)
-                print('---')
-                print(err)
 
     if index_files.get('styl') and index_files.get('less'):
         print("ERROR: I don't know how to combine Stylus and Less in a single build... yet!")
         return
 
     if index_files.get('styl') and css_dir:
-        build_stylus()
+        build_stylus(app_asset_dirs)
     elif index_files.get('less') and css_dir:
-        build_less()
+        build_less(app_asset_dirs)
 
     if index_files['js'] and js_dir:
-        build_js()
+        build_js(app_asset_dirs)
     
     if '--run' in argv:
         subprocess.Popen(['python', 'manage.py', 'runserver', '0.0.0.0:8000'])
@@ -149,7 +161,7 @@ def main(argv):
                         changed = True
                         stylus_watch[fn] = os.stat(fn).st_mtime
             if changed:
-                build_stylus()
+                build_stylus(app_asset_dirs)
             
             changed = False
             for fn in js_watch:
@@ -159,7 +171,7 @@ def main(argv):
                             changed = True
                             js_watch[fn] = os.stat(fn).st_mtime
             if changed:
-                build_js()
+                build_js(app_asset_dirs)
 
 
 if __name__ == '__main__':

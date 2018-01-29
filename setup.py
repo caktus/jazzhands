@@ -8,4 +8,8 @@ setup(name='magickbuild',
       author_email='calvin@caktusgroup.com',
       license='MIT',
       packages=['magickbuild'],
-      zip_safe=False)
+      zip_safe=False,
+      scripts=[
+            'scripts/magickbuild',
+      ],
+)
