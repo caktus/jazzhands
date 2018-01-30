@@ -45,6 +45,10 @@ def collect_app_asset_src(dirs, lang):
         dest_dir = os.path.join(os.path.dirname(index_files[lang]), app_name)
         
         print("collecting assets", app_name, lang, app_asset_dir, '->', dest_dir)
+        if lang == 'js':
+            if os.path.exists(os.path.join("node_modules", app_name)):
+                os.unlink(os.path.join("node_modules", app_name))
+            os.symlink(os.path.join("..", dest_dir), os.path.join("node_modules", app_name))
 
         os.makedirs(os.path.join(js_dir, app_name), exist_ok=True)
         pull_app_assets(app_asset_dir, dest_dir)
@@ -69,7 +73,7 @@ def build_js(dirs):
     out, err = p.communicate()
 
     if p.returncode > 0:
-        if '--auto-npm' in argv:
+        if '--auto-npm' in sys.argv:
             err = err.decode('ascii')
             m = re.search(r"Cannot find module '(.*)' from", err)
             if m:
