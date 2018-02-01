@@ -13,6 +13,10 @@ lang_dir_names = {
     'styl': 'stylus',
 }
 
+DO_COLLECT = False
+DO_BUILD = False
+DO_RUN = False
+
 index_files = {}
 
 css_dir = None
@@ -46,16 +50,16 @@ def collect_app_asset_src(dirs, lang):
         
         print("collecting assets", app_name, lang, app_asset_dir, '->', dest_dir)
         if lang == 'js':
-            if os.path.exists(os.path.join("node_modules", app_name)):
-                os.unlink(os.path.join("node_modules", app_name))
-            os.symlink(os.path.join("..", dest_dir), os.path.join("node_modules", app_name))
+            nm_path = os.path.join("node_modules", app_name)
+            if os.path.exists(nm_path):
+                os.unlink(nm_path)
+            os.symlink(os.path.join("..", dest_dir), nm_path)
 
         os.makedirs(os.path.join(js_dir, app_name), exist_ok=True)
         pull_app_assets(app_asset_dir, dest_dir)
 
 def build_stylus(dirs):
     print("Building Stylus")
-    collect_app_asset_src(dirs, 'styl')
     in_file = open(index_files['styl'], 'r')
     out_file = open(os.path.join(css_dir, 'bundle.css'), 'w')
     stylus_dir = os.path.dirname(index_files['styl'])
@@ -63,12 +67,10 @@ def build_stylus(dirs):
 
 def build_less(dirs):
     print("Building Less")
-    collect_app_asset_src(dirs, 'less')
     subprocess.call(['lessc', index_files['less'], os.path.join(css_dir, 'bundle.css')])
 
 def build_js(dirs):
     print("Building JS")
-    collect_app_asset_src(dirs, 'js')
     p = subprocess.Popen(['browserify', index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')], stderr=subprocess.PIPE)
     out, err = p.communicate()
 
@@ -88,20 +90,26 @@ def build_js(dirs):
 def main(argv):
     global js_dir
     global css_dir
+    global DO_BUILD, DO_COLLECT, DO_RUN
+
+    ### INSPECT AND CONFIGURE
+
+    if len(sys.argv) <= 1 and sys.argv[1] == 'build':
+        DO_COLLECT = DO_BUILD = True
+    elif sys.argv[1] == 'collect':
+        DO_COLLECT = True
+    elif sys.argv[1] == 'run':
+        DO_COLLECT = DO_BUILD = DO_RUN = True
 
     project_dir = None
-    if len(argv) == 1 or argv[1].startswith('-'):
-        # detect project dir
-        for dirname in os.listdir('.'):
-            has_settings = (
-                os.path.exists(os.path.join(dirname, 'settings'))
-                or os.path.exists(os.path.join(dirname, 'settings.py'))
-            )
-            if os.path.isdir(dirname) and has_settings:
-                project_dir = dirname
-        assert project_dir
-    else:
-        project_dir = argv[1]
+    for dirname in os.listdir('.'):
+        has_settings = (
+            os.path.exists(os.path.join(dirname, 'settings'))
+            or os.path.exists(os.path.join(dirname, 'settings.py'))
+        )
+        if os.path.isdir(dirname) and has_settings:
+            project_dir = dirname
+    assert project_dir
 
     # Look through all the Python paths for packages with static files in them
     for path in sys.path:
@@ -146,15 +154,31 @@ def main(argv):
         print("ERROR: I don't know how to combine Stylus and Less in a single build... yet!")
         return
 
-    if index_files.get('styl') and css_dir:
-        build_stylus(app_asset_dirs)
-    elif index_files.get('less') and css_dir:
-        build_less(app_asset_dirs)
+    ### COLLECT
 
-    if index_files['js'] and js_dir:
-        build_js(app_asset_dirs)
+    if DO_COLLECT:
+        if index_files.get('styl') and css_dir:
+            collect_app_asset_src(app_asset_dirs, 'styl')
+        elif index_files.get('less') and css_dir:
+            collect_app_asset_src(app_asset_dirs, 'less')
+
+        if index_files['js'] and js_dir:
+            collect_app_asset_src(app_asset_dirs, 'js')
+
+    ### BUILD
+
+    if DO_BUILD:
+        if index_files.get('styl') and css_dir:
+            build_stylus(app_asset_dirs)
+        elif index_files.get('less') and css_dir:
+            build_less(app_asset_dirs)
+
+        if index_files['js'] and js_dir:
+            build_js(app_asset_dirs)
+
+    ### RUN
     
-    if '--run' in argv:
+    if DO_RUN:
         subprocess.Popen(['python', 'manage.py', 'runserver', '0.0.0.0:8000'])
 
         while 1:
