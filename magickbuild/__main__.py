@@ -48,7 +48,7 @@ def process_jsx(root):
         for fn in files:
             if fn.endswith('.js'):
                 fp = os.path.join(root, fn)
-                args = ['babel', '--presets=react,es2015', fp, '-o', fp]
+                args = ['./node_modules/.bin/babel', '--presets=react,es2015', fp, '-o', fp]
                 p = subprocess.Popen(args, stderr=subprocess.PIPE)
                 print("JSX processed", fp)
 
@@ -74,7 +74,8 @@ def build_stylus(dirs):
     in_file = open(index_files['styl'], 'r')
     out_file = open(os.path.join(css_dir, 'bundle.css'), 'w')
     stylus_dir = os.path.dirname(index_files['styl'])
-    subprocess.call(['stylus', '--resolve-url'], cwd=stylus_dir, stdin=in_file, stdout=out_file)
+    stylus_bin = os.path.join(os.path.relpath(".", stylus_dir), "node_modules/.bin/stylus")
+    subprocess.call([stylus_bin, '--resolve-url'], cwd=stylus_dir, stdin=in_file, stdout=out_file)
 
 def build_less(dirs):
     print("Building Less")
@@ -82,7 +83,7 @@ def build_less(dirs):
 
 def build_js(dirs):
     print("Building JS")
-    args = ['browserify']
+    args = ['./node_modules/.bin/browserify']
     # args.extend("-t [ babelify --presets [ react es2015 ] ]".split())
     args.extend([index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')])
     p = subprocess.Popen(args, stderr=subprocess.PIPE)
