@@ -3,8 +3,7 @@ import re
 import time
 import subprocess
 from io import StringIO
-from distutils.dir_util import copy_tree
-from shutil import rmtree
+from shutil import rmtree, copytree
 
 lang_dir_names = {
     'js': 'js',
@@ -12,10 +11,6 @@ lang_dir_names = {
     'less': 'less',
     'styl': 'stylus',
 }
-
-DO_COLLECT = False
-DO_BUILD = False
-DO_RUN = False
 
 index_files = {}
 
@@ -27,13 +22,17 @@ js_watch = {}
 
 app_asset_dirs = {}
 
-def pull_app_assets(from_path, to_path):
-    # copy_tree(from_path, to_path)
+def pull_app_assets(from_path, to_path, copy=False):
+    # copytree(from_path, to_path)
     if os.path.islink(to_path):
         os.unlink(to_path)
     elif os.path.exists(to_path):
         rmtree(to_path)
-    os.symlink(from_path, to_path)
+    print("copy" if copy else "link", from_path, "->", to_path)
+    if copy:
+        copytree(from_path, to_path)
+    else:    
+        os.symlink(from_path, to_path)
 
 def record_app_asset_dir(dirs, root, lang):
     dir_name = lang_dir_names[lang]
@@ -44,19 +43,31 @@ def record_app_asset_dir(dirs, root, lang):
         dirs.setdefault(lang, [])
         dirs[lang].append((app_name, app_js_dir))
 
+def process_jsx(root):
+    for root, dirs, files in os.walk(root):
+        for fn in files:
+            if fn.endswith('.js'):
+                fp = os.path.join(root, fn)
+                args = ['babel', '--presets=react,es2015', fp, '-o', fp]
+                p = subprocess.Popen(args, stderr=subprocess.PIPE)
+                print("JSX processed", fp)
+
 def collect_app_asset_src(dirs, lang):
     for (app_name, app_asset_dir) in dirs[lang]:
         dest_dir = os.path.join(os.path.dirname(index_files[lang]), app_name)
         
         print("collecting assets", app_name, lang, app_asset_dir, '->', dest_dir)
         if lang == 'js':
-            nm_path = os.path.join("node_modules", app_name)
-            if os.path.exists(nm_path):
-                os.unlink(nm_path)
-            os.symlink(os.path.join("..", dest_dir), nm_path)
+            dest_dir = os.path.join("node_modules", app_name)
+            for root, dirs, files in os.walk(app_asset_dir):
+                for fn in files:
+                    if fn.endswith('.js'):
+                        js_watch[os.path.join(root, fn)] = os.stat(os.path.join(root, fn)).st_mtime
 
-        os.makedirs(os.path.join(js_dir, app_name), exist_ok=True)
-        pull_app_assets(app_asset_dir, dest_dir)
+        pull_app_assets(app_asset_dir, dest_dir, copy=(lang == 'js'))
+
+        if lang == 'js':
+            process_jsx(dest_dir)
 
 def build_stylus(dirs):
     print("Building Stylus")
@@ -71,7 +82,10 @@ def build_less(dirs):
 
 def build_js(dirs):
     print("Building JS")
-    p = subprocess.Popen(['browserify', index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')], stderr=subprocess.PIPE)
+    args = ['browserify']
+    # args.extend("-t [ babelify --presets [ react es2015 ] ]".split())
+    args.extend([index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')])
+    p = subprocess.Popen(args, stderr=subprocess.PIPE)
     out, err = p.communicate()
 
     if p.returncode > 0:
@@ -85,16 +99,27 @@ def build_js(dirs):
         else:
             print(out)
             print('---')
-            print(err)
+            print(err.decode('utf8'))
 
 def main(argv):
     global js_dir
     global css_dir
-    global DO_BUILD, DO_COLLECT, DO_RUN
+
+    DO_COLLECT = False
+    DO_BUILD = False
+    DO_RUN = False
 
     ### INSPECT AND CONFIGURE
 
-    if len(sys.argv) <= 1 and sys.argv[1] == 'build':
+    if len(sys.argv) <= 1:
+        DO_COLLECT = DO_BUILD = True
+    elif sys.argv[1] == 'setup':
+        # Do one time setup stuff for the project
+        subprocess.call("npm install --save babelify".split())
+        subprocess.call("npm install --save babel-preset-react".split())
+        subprocess.call("npm install --save babel-preset-es2015".split())
+        return
+    elif sys.argv[1] == 'build':
         DO_COLLECT = DO_BUILD = True
     elif sys.argv[1] == 'collect':
         DO_COLLECT = True
@@ -163,7 +188,10 @@ def main(argv):
             collect_app_asset_src(app_asset_dirs, 'less')
 
         if index_files['js'] and js_dir:
+            jsx_registry_path = os.path.join(os.path.dirname(index_files['js']), 'jsx_registry.js')
+            subprocess.call(['python', 'manage.py', 'compilejsx'], stdout=open(jsx_registry_path, 'w'))
             collect_app_asset_src(app_asset_dirs, 'js')
+            process_jsx(os.path.dirname(index_files['js']))
 
     ### BUILD
 
@@ -189,6 +217,7 @@ def main(argv):
                         changed = True
                         stylus_watch[fn] = os.stat(fn).st_mtime
             if changed:
+                collect_app_asset_src(app_asset_dirs, 'styl')
                 build_stylus(app_asset_dirs)
             
             changed = False
@@ -199,6 +228,7 @@ def main(argv):
                             changed = True
                             js_watch[fn] = os.stat(fn).st_mtime
             if changed:
+                collect_app_asset_src(app_asset_dirs, 'js')
                 build_js(app_asset_dirs)
 
 
