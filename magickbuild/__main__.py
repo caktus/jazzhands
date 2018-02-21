@@ -43,14 +43,20 @@ def record_app_asset_dir(dirs, root, lang):
         dirs.setdefault(lang, [])
         dirs[lang].append((app_name, app_js_dir))
 
+def _process_jsx(fp):
+    if fp.endswith('.js'):
+        args = ['./node_modules/.bin/babel', '--presets=react,es2015', fp, '-o', fp]
+        p = subprocess.Popen(args, stderr=subprocess.PIPE)
+        print("JSX processed", fp)
+
 def process_jsx(root):
-    for root, dirs, files in os.walk(root):
-        for fn in files:
-            if fn.endswith('.js'):
+    if os.path.isdir(root):
+        for root, dirs, files in os.walk(root):
+            for fn in files:
                 fp = os.path.join(root, fn)
-                args = ['./node_modules/.bin/babel', '--presets=react,es2015', fp, '-o', fp]
-                p = subprocess.Popen(args, stderr=subprocess.PIPE)
-                print("JSX processed", fp)
+                _process_jsx(fp)
+    else:
+        _process_jsx(root)
 
 def collect_app_asset_src(dirs, lang):
     for (app_name, app_asset_dir) in dirs[lang]:
@@ -191,8 +197,9 @@ def main(argv):
         if index_files['js'] and js_dir:
             jsx_registry_path = os.path.join(os.path.dirname(index_files['js']), 'jsx_registry.js')
             subprocess.call(['python', 'manage.py', 'compilejsx'], stdout=open(jsx_registry_path, 'w'))
+            process_jsx(jsx_registry_path)
+            
             collect_app_asset_src(app_asset_dirs, 'js')
-            process_jsx(os.path.dirname(index_files['js']))
 
     ### BUILD
 
