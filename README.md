@@ -1,6 +1,8 @@
-# magickbuild
+# jazzhands
 
-Magick Build is a automatic build and dev-run tool for modern Django projects.
+Jazz Hands is a automatic build and dev-run tool for Django projects with modern frontends.
+
+![Caution: Jazz Hands!](jazzhands.gif)
 
 * Detects and compiles ES6 to JS and Less or Stylus to CSS!
 * Allows importing ES6, Less, and Stylus modules from Django apps!
@@ -11,8 +13,8 @@ Magick Build is a automatic build and dev-run tool for modern Django projects.
 Just install it in your project's environment and run it in your repo.
 
 ```
-pip install -e git@github.com:caktus/magickbuild.git
-python -m magickbuild # build
-python -m magickbuild --run # build, run dev server, rebuild on changes
+pip install -e git@github.com:caktus/jazzhands.git
+python -m jazzhands # build
+python -m jazzhands --run # build, run dev server, rebuild on changes
 ```
 

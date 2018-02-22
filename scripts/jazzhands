@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+import sys
+import jazzhands.__main__
+
+jazzhands
+.__main__.main(sys.argv)
