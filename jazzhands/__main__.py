@@ -17,8 +17,11 @@ index_files = {}
 css_dir = None
 js_dir = None
 
-stylus_watch = {}
-js_watch = {}
+watch = {
+    'js': {},
+    'less': {},
+    'styl': {},
+}
 
 app_asset_dirs = {}
 
@@ -71,7 +74,7 @@ def collect_app_asset_src(dirs, lang):
             for root, dirs, files in os.walk(app_asset_dir):
                 for fn in files:
                     if fn.endswith('.js'):
-                        js_watch[os.path.join(root, fn)] = os.stat(os.path.join(root, fn)).st_mtime
+                        watch['js'][os.path.join(root, fn)] = os.stat(os.path.join(root, fn)).st_mtime
 
         pull_app_assets(app_asset_dir, dest_dir, copy=(lang == 'js'))
 
@@ -185,12 +188,10 @@ def main(argv):
             js_dir = root
         
         for fn in files:
-            if fn.endswith('.styl'):
-                fn = os.path.join(root, fn)
-                stylus_watch[fn] = os.stat(fn).st_mtime
-            if fn.endswith('.js'):
-                fn = os.path.join(root, fn)
-                js_watch[fn] = os.stat(fn).st_mtime
+            for ext in ('js', 'styl', 'less'):
+                if fn.endswith('.' + ext):
+                    fn = os.path.join(root, fn)
+                    watch[ext][fn] = os.stat(fn).st_mtime
 
     if index_files.get('styl') and index_files.get('less'):
         print("ERROR: I don't know how to combine Stylus and Less in a single build... yet!")
@@ -206,9 +207,12 @@ def main(argv):
 
         if index_files['js'] and js_dir:
             jsx_registry_path = os.path.join(os.path.dirname(index_files['js']), 'jsx_registry.js')
-            subprocess.call(['python', 'manage.py', 'compilejsx'], stdout=open(jsx_registry_path, 'w'))
-            process_jsx(jsx_registry_path)
-            
+            try:
+                import django_jsx
+                subprocess.call(['python', 'manage.py', 'compilejsx'], stdout=open(jsx_registry_path, 'w'))
+                process_jsx(jsx_registry_path)
+            except ImportError:
+                pass
             collect_app_asset_src(app_asset_dirs, 'js')
 
     ### BUILD
@@ -229,22 +233,32 @@ def main(argv):
 
         while 1:
             changed = False
-            for fn in stylus_watch:
+            for fn in watch['styl']:
                 if fn.endswith('.styl'):
-                    if stylus_watch[fn] < os.stat(fn).st_mtime:
+                    if watch['styl'][fn] < os.stat(fn).st_mtime:
                         changed = True
-                        stylus_watch[fn] = os.stat(fn).st_mtime
+                        watch['styl'][fn] = os.stat(fn).st_mtime
             if changed:
                 collect_app_asset_src(app_asset_dirs, 'styl')
                 build_stylus(app_asset_dirs)
             
             changed = False
-            for fn in js_watch:
+            for fn in watch['less']:
+                if fn.endswith('.less'):
+                    if watch['less'][fn] < os.stat(fn).st_mtime:
+                        changed = True
+                        watch['less'][fn] = os.stat(fn).st_mtime
+            if changed:
+                collect_app_asset_src(app_asset_dirs, 'less')
+                build_less(app_asset_dirs)
+            
+            changed = False
+            for fn in watch['js']:
                 if fn.endswith('.js'):
-                    if js_watch[fn] < os.stat(fn).st_mtime:
+                    if watch['js'][fn] < os.stat(fn).st_mtime:
                         if not fn.endswith('bundle.js'):
                             changed = True
-                            js_watch[fn] = os.stat(fn).st_mtime
+                            watch['js'][fn] = os.stat(fn).st_mtime
             if changed:
                 collect_app_asset_src(app_asset_dirs, 'js')
                 build_js(app_asset_dirs)
