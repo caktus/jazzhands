@@ -59,6 +59,9 @@ def process_jsx(root):
         _process_jsx(root)
 
 def collect_app_asset_src(dirs, lang):
+    if lang not in dirs:
+        print("No %s to collect" % (lang,))
+        return
     for (app_name, app_asset_dir) in dirs[lang]:
         dest_dir = os.path.join(os.path.dirname(index_files[lang]), app_name)
         
@@ -90,7 +93,7 @@ def build_less(dirs):
 def build_js(dirs):
     print("Building JS")
     args = ['./node_modules/.bin/browserify']
-    # args.extend("-t [ babelify --presets [ react es2015 ] ]".split())
+    args.extend("-t [ babelify --presets [ react es2015 ] ]".split())
     args.extend([index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')])
     p = subprocess.Popen(args, stderr=subprocess.PIPE)
     out, err = p.communicate()
@@ -122,9 +125,15 @@ def main(argv):
         DO_COLLECT = DO_BUILD = True
     elif sys.argv[1] == 'setup':
         # Do one time setup stuff for the project
-        subprocess.call("npm install --save babelify".split())
-        subprocess.call("npm install --save babel-preset-react".split())
-        subprocess.call("npm install --save babel-preset-es2015".split())
+        args = [
+            "npm", "install", "--save",
+            "babel-core",
+            "babel-cli",
+            "babelify",
+            "babel-preset-react",
+            "babel-preset-es2015",
+        ]
+        subprocess.call(args)
         return
     elif sys.argv[1] == 'build':
         DO_COLLECT = DO_BUILD = True
@@ -153,6 +162,7 @@ def main(argv):
             if 'lib/python' not in root or 'site-packages' in root:
                 record_app_asset_dir(app_asset_dirs, root, 'js')
                 record_app_asset_dir(app_asset_dirs, root, 'styl')
+                record_app_asset_dir(app_asset_dirs, root, 'less')
 
     # Find all the asset files in the project itself
     for root, dirs, files in os.walk(project_dir, followlinks=True):
