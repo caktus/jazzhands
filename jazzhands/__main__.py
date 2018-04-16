@@ -84,7 +84,7 @@ def collect_app_asset_src(dirs, lang):
 def build_stylus(dirs):
     print("Building Stylus")
     in_file = open(index_files['styl'], 'r')
-    out_file = open(os.path.join(css_dir, 'bundle.css'), 'w')
+    out_file = open(os.path.join(css_dir, 'bundle.css'), 'a')
     stylus_dir = os.path.dirname(index_files['styl'])
     stylus_bin = os.path.join(os.path.relpath(".", stylus_dir), "node_modules/.bin/stylus")
     subprocess.call([stylus_bin, '--resolve-url'], cwd=stylus_dir, stdin=in_file, stdout=out_file)
@@ -193,9 +193,9 @@ def main(argv):
                     fn = os.path.join(root, fn)
                     watch[ext][fn] = os.stat(fn).st_mtime
 
-    if index_files.get('styl') and index_files.get('less'):
-        print("ERROR: I don't know how to combine Stylus and Less in a single build... yet!")
-        return
+    # if index_files.get('styl') and index_files.get('less'):
+    #     print("ERROR: I don't know how to combine Stylus and Less in a single build... yet!")
+    #     return
 
     ### COLLECT
 
@@ -218,10 +218,13 @@ def main(argv):
     ### BUILD
 
     if DO_BUILD:
+        
+        # Build a bundle from the LESS, if present, then append the Stylus bundle, if present.
+        os.unlink(os.path.join(css_dir, 'bundle.css'))
+        if index_files.get('less') and css_dir:
+            build_less(app_asset_dirs)
         if index_files.get('styl') and css_dir:
             build_stylus(app_asset_dirs)
-        elif index_files.get('less') and css_dir:
-            build_less(app_asset_dirs)
 
         if index_files['js'] and js_dir:
             build_js(app_asset_dirs)
