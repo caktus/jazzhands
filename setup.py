@@ -9,7 +9,9 @@ setup(name='jazzhands',
       license='MIT',
       packages=['jazzhands'],
       zip_safe=False,
-      scripts=[
-            'scripts/jazzhands',
-      ],
+      entry_points={
+            'console_scripts': [
+                  'jazzhands=jazzhands.__main__:main',
+            ],
+      },
 )

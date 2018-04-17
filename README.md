@@ -15,8 +15,9 @@ Just install it in your project's environment and run it in your repo.
 ```
 pip install -e git@github.com:caktus/jazzhands.git
 python -m jazzhands # build
+python -m jazzhands setup   # install necessary ES6 packages with Node, run once
 python -m jazzhands collect # collect frontend resources from Django apps
-python -m jazzhands build # build Stylus and ES6 into bundles
-python -m jazzhands run # build, run dev server, rebuild on changes
+python -m jazzhands build   # build Stylus and ES6 into bundles
+python -m jazzhands run     # build, run dev server, rebuild on changes
 ```
 
