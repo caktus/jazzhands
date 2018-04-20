@@ -126,11 +126,11 @@ def build_stylus(dirs):
     stylus_dir = os.path.dirname(index_files['styl'])
     stylus_bin = os.path.join(os.path.relpath(".", stylus_dir), "node_modules/.bin/stylus")
     if not os.path.exists(stylus_bin):
-        print("ERROR: Stylus found, but stylus is not installed.")
+        print("ERROR: Stylus files found, but stylus is not installed.")
         print("To fix, install stylus in this project using NPM:")
         print("    npm install --save stylus")
         print("Or, using Yarn:")
-        print("    yarn install stylus")
+        print("    yarn add stylus")
         sys.exit(1)
     subprocess.call([stylus_bin, '--resolve-url'], cwd=stylus_dir, stdin=in_file, stdout=out_file)
 
@@ -207,14 +207,18 @@ def main(argv=sys.argv):
         )
         if os.path.isdir(dirname) and has_settings:
             project_dir = dirname
-    assert project_dir  # If we can't find the location of the project's "main" package, abort
+    
+    # If we can't find the location of the project's "main" package, abort
+    if not project_dir:
+        print("Could not locate your project's main package. Jazzhands tries to locate this relative"
+            " to a `settings` package or `settings.py` module.")
 
     # Look through all the Python paths for packages with static files in them
+    exclude_dirs = ('.tox', 'node_modules', '.git')
     for path in sys.path:
         for root, dirs, files in os.walk(path):
             # Skip some obvious irrelevant directories
-            if ".tox" in root or 'node_modules' in root or ".git" in root:
-                continue
+            dirs[:] = [d for d in dirs if d not in exclude_dirs]
             # Skip Python packages / Django apps built into the project itself
             if os.path.relpath(root).split('/', 1)[0] == os.path.relpath(project_dir):
                 continue
@@ -264,17 +268,18 @@ def main(argv=sys.argv):
     if DO_COLLECT:
         if index_files.get('styl') and css_dir:
             collect_app_asset_src(app_asset_dirs, 'styl')
-        elif index_files.get('less') and css_dir:
+        if index_files.get('less') and css_dir:
             collect_app_asset_src(app_asset_dirs, 'less')
 
         if index_files['js'] and js_dir:
             jsx_registry_path = os.path.join(os.path.dirname(index_files['js']), 'jsx_registry.js')
             try:
                 import django_jsx  # noqa: F401
-                subprocess.call(['python', 'manage.py', 'compilejsx', '-o', jsx_registry_path])
-                process_jsx(jsx_registry_path)
             except ImportError:
                 pass
+            else:
+                subprocess.call(['python', 'manage.py', 'compilejsx', '-o', jsx_registry_path])
+                process_jsx(jsx_registry_path)
             collect_app_asset_src(app_asset_dirs, 'js')
 
     # BUILD
