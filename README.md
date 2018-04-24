@@ -38,7 +38,7 @@ be linked into your project's own `static/less/` or `static/stylus/`.
 
 ## Building
 
-Jazzhands can also build you project's frontend assets for you. This includes compiling modern ECMAScript to
+Jazzhands can also build your project's frontend assets for you. This includes compiling modern ECMAScript to
 browser-compatible Javascript in a `bundle.js` file and converting both Less and Stylus in your project to
 a combined `bundle.css` file.
 
