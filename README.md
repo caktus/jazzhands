@@ -10,14 +10,75 @@ Jazz Hands is a automatic build and dev-run tool for Django projects with modern
 * Runs your dev server and automatically rebuilds front-end assets when change are detected!
 * Is Magick :sparkles:!
 
-Just install it in your project's environment and run it in your repo.
+## Setup
+
+You can install Jazzhands locally in the virtual environment of a Django project. Once installed
+you can install prerequisite NPM packages for ECMAScript compilation with Jazzhand's `setup`
+command.
 
 ```
 pip install -e git@github.com:caktus/jazzhands.git
-python -m jazzhands # build
-python -m jazzhands setup   # install necessary ES6 packages with Node, run once
-python -m jazzhands collect # collect frontend resources from Django apps
-python -m jazzhands build   # build Stylus and ES6 into bundles
-python -m jazzhands run     # build, run dev server, rebuild on changes
+jazzhands setup
 ```
 
+## Collecting
+
+To use Jazzhands to collect non-static frontend assets (things that get compiled or otherwise converted)
+into your local project, run the `collect` command.
+
+```jazzhands collect
+```
+
+Jazzhands will locate Python packages that contain a `static/` dirctory with either a `js/`, `less/`, or
+`stylus/` folder within it. If any of those directories has an index file (`index.js`, etc.) then Jazzhands
+will try to collect that directory as a Javascript package or a Less/Stylus library into your project.
+
+Javascript will be collected into your `node_modules/` directory for import. Less and Stylus libraries will
+be linked into your project's own `static/less/` or `static/stylus/`.
+
+## Building
+
+Jazzhands can also build you project's frontend assets for you. This includes compiling modern ECMAScript to
+browser-compatible Javascript in a `bundle.js` file and converting both Less and Stylus in your project to
+a combined `bundle.css` file.
+
+Jazzhands will locate a top-level `index.js` file in your project and attempt to compile this into the JS
+bundle. It will similarly locate `index.less` or `index.styl` and create a bundle at `static/css/bundle.css`.
+If you have both Less and Stylus, they will be combined into a single bundle together.
+
+The `build` command will run the `collect` command first, so the built bundles can include usage of Javascript
+or styles that have been collected from Django apps or other Python libraries in your project. You can run
+the build command directly.
+
+```
+jazzhands build
+```
+
+## Running
+
+Finally, if you are using Jazzhands you're probably doing active work on your frontend in a local development
+environment and Jazzhands can help with that! As well as collecting assets and building frontend bundles, it
+can manage running your Django development server while watching for changes in any of your frontend assets,
+even if they came from a 3rd party app in the collection stage.
+
+Jazzhands doesn't have options to control the address or ports yet, so it will run the local development
+server on port 8000 as a default. The `run` command executes the `collect` and `build` commands first, then
+starts up Django's own `runserver` management command.
+
+```
+jazzhands run
+```
+
+While the development server is running, if changes are detected in any of the JS, Less, or Stylus files used
+in the build process the bundles will be regenerated automatically. If a change is detected in files that came
+from another package, they will be reimported into the project.
+
+### Experimental Feature
+
+#### ```--auto-npm```
+
+Use the experimental feature (which may or may not be removed) called Auto NPM Install. When using this feature, if compiling the `bundle.js` file fails and that failure appears
+to be caused by a missing NPM package, we will try to install it automatically and add
+it to your `package.json`.
+
+This lets you add an experiment with new code using anything available on the NPM registry.

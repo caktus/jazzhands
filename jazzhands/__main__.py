@@ -124,7 +124,7 @@ def build_stylus(dirs):
     in_file = open(index_files['styl'], 'r')
     out_file = open(os.path.join(css_dir, 'bundle.css'), 'a')
     stylus_dir = os.path.dirname(index_files['styl'])
-    stylus_bin = os.path.join(os.path.relpath(".", stylus_dir), "node_modules/.bin/stylus")
+    stylus_bin = os.path.abspath("node_modules/.bin/stylus")
     if not os.path.exists(stylus_bin):
         print("ERROR: Stylus files found, but stylus is not installed.")
         print("To fix, install stylus in this project using NPM:")
@@ -212,6 +212,7 @@ def main(argv=sys.argv):
     if not project_dir:
         print("Could not locate your project's main package. Jazzhands tries to locate this relative"
             " to a `settings` package or `settings.py` module.")
+        sys.exit(1)
 
     # Look through all the Python paths for packages with static files in them
     exclude_dirs = ('.tox', 'node_modules', '.git')
@@ -288,7 +289,9 @@ def main(argv=sys.argv):
 
         # Build a bundle from the LESS, if present, then append the Stylus bundle, if present.
         if css_dir:
-            os.unlink(os.path.join(css_dir, 'bundle.css'))
+            bundle_css_path = os.path.join(css_dir, 'bundle.css')
+            if os.path.exists(bundle_css_path):
+                os.unlink(bundle_css_path)
             if index_files.get('less'):
                 build_less(app_asset_dirs)
             if index_files.get('styl'):
