@@ -119,7 +119,7 @@ def collect_app_asset_src(dirs, lang):
             process_jsx(dest_dir)
 
 
-def new_css_bundle(css_dir):
+def new_css_bundle():
     bundle_css_path = os.path.join(css_dir, 'bundle.css')
     if os.path.exists(bundle_css_path):
         os.unlink(bundle_css_path)
