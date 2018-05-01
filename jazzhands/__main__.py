@@ -338,14 +338,13 @@ def main(argv=sys.argv):
             if less_changed or stylus_changed:
                 new_css_bundle()
 
-            if stylus_changed:
-                collect_app_asset_src(app_asset_dirs, 'styl')
-                build_stylus(app_asset_dirs)
-
+                if watch['styl']:
+                    collect_app_asset_src(app_asset_dirs, 'styl')
+                    build_stylus(app_asset_dirs)
             
-            if less_changed:
-                collect_app_asset_src(app_asset_dirs, 'less')
-                build_less(app_asset_dirs)
+                if watch['less']:
+                    collect_app_asset_src(app_asset_dirs, 'less')
+                    build_less(app_asset_dirs)
 
             changed = False
             for fn in watch['js']:
