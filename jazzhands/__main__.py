@@ -119,6 +119,13 @@ def collect_app_asset_src(dirs, lang):
             process_jsx(dest_dir)
 
 
+def new_css_bundle():
+    bundle_css_path = os.path.join(css_dir, 'bundle.css')
+    if os.path.exists(bundle_css_path):
+        os.unlink(bundle_css_path)
+    return bundle_css_path
+
+
 def build_stylus(dirs):
     print("Building Stylus")
     in_file = open(index_files['styl'], 'r')
@@ -289,9 +296,7 @@ def main(argv=sys.argv):
 
         # Build a bundle from the LESS, if present, then append the Stylus bundle, if present.
         if css_dir:
-            bundle_css_path = os.path.join(css_dir, 'bundle.css')
-            if os.path.exists(bundle_css_path):
-                os.unlink(bundle_css_path)
+            bundle_css_path = new_css_bundle()
             if index_files.get('less'):
                 build_less(app_asset_dirs)
             if index_files.get('styl'):
@@ -312,25 +317,34 @@ def main(argv=sys.argv):
         while 1:
             time.sleep(1)
 
-            changed = False
+            # Less and Stylus could be combined, so when we watch we watch them
+            # together and clear the current bundle if we rebuild either. Otherwise,
+            # they'll keep being appended.
+
+            stylus_changed = False
             for fn in watch['styl']:
                 if fn.endswith('.styl'):
                     if watch['styl'][fn] < os.stat(fn).st_mtime:
-                        changed = True
+                        stylus_changed = True
                         watch['styl'][fn] = os.stat(fn).st_mtime
-            if changed:
-                collect_app_asset_src(app_asset_dirs, 'styl')
-                build_stylus(app_asset_dirs)
 
-            changed = False
+            less_changed = False
             for fn in watch['less']:
                 if fn.endswith('.less'):
                     if watch['less'][fn] < os.stat(fn).st_mtime:
-                        changed = True
+                        less_changed = True
                         watch['less'][fn] = os.stat(fn).st_mtime
-            if changed:
-                collect_app_asset_src(app_asset_dirs, 'less')
-                build_less(app_asset_dirs)
+
+            if less_changed or stylus_changed:
+                new_css_bundle()
+
+                if watch['styl']:
+                    collect_app_asset_src(app_asset_dirs, 'styl')
+                    build_stylus(app_asset_dirs)
+            
+                if watch['less']:
+                    collect_app_asset_src(app_asset_dirs, 'less')
+                    build_less(app_asset_dirs)
 
             changed = False
             for fn in watch['js']:
