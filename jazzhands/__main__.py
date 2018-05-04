@@ -1,10 +1,15 @@
+from __future__ import print_function
+
 import os
 import re
 from shutil import rmtree, copytree
 import subprocess
 import sys
 import time
+import json
 from warnings import warn
+
+import argparse
 
 
 lang_dir_names = {
@@ -26,6 +31,9 @@ watch = {
 }
 
 app_asset_dirs = {}
+
+manage_dir = None
+project_dir = None
 
 
 def pull_app_assets(from_path, to_path, copy=False):
@@ -65,7 +73,8 @@ def _process_jsx(fp):
 
     if fp.endswith('.js'):
         babel_bin = './node_modules/.bin/babel'
-        args = [babel_bin, '--presets=react,es2015', fp, '-o', fp]
+        # args '--presets=react,es2015',
+        args = [babel_bin, fp, '-o', fp]
         if not os.path.exists(babel_bin):
             print("ERROR: Javascript found, but babel is not installed.")
             print("To fix, install babel in this project:")
@@ -150,14 +159,15 @@ def build_less(dirs):
 def build_js(dirs):
     print("Building JS")
     args = ['./node_modules/.bin/browserify']
-    args.extend("-t [ babelify --presets [ react es2015 ] ]".split())
+    args.extend("-t [ babelify ]".split())
     args.extend([index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')])
+    print(args)
     proc = subprocess.Popen(args, stderr=subprocess.PIPE)
     out, err = proc.communicate()
 
     if proc.returncode > 0:
         # Experimental "auto install" feature for missing NPM dependencies during development
-        if '--auto-npm' in sys.argv:
+        if args.auto_npm:
             warn("--auto-npm is an experimental feature and maybe a bad idea. It might go away soon.")
             err = err.decode('ascii')
             match = re.search(r"Cannot find module '(.*)' from", err)
@@ -171,9 +181,24 @@ def build_js(dirs):
             print(err.decode('utf8'))
 
 
+def manage_py(args, background=False):
+    cwd = os.getcwd()
+    os.chdir(manage_dir)
+    try:
+        if background:
+            return subprocess.Popen(['python', 'manage.py'] + args)
+        else:
+            return subprocess.call(['python', 'manage.py'] + args)
+    finally:
+        os.chdir(cwd)
+
+
 def main(argv=sys.argv):
     global js_dir
     global css_dir
+    global project_dir
+    global manage_dir
+    global args
 
     DO_COLLECT = False
     DO_BUILD = False
@@ -184,25 +209,57 @@ def main(argv=sys.argv):
     # collect, build, run or the setup command.
     # build implies collect, run implies build and collect. setup runs on its own.
 
-    if len(sys.argv) <= 1:
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(which=None)
+    # parser.add_argument('command', type=str, action='store')
+    subparsers = parser.add_subparsers()
+    parsers = {}
+    def add_command(cmd):
+        parsers[cmd] = subparsers.add_parser(cmd)
+        parsers[cmd].set_defaults(which=cmd)
+
+    add_command('setup')
+    parsers['setup'].add_argument('-p', '--preset', action='append', type=str, default=[])
+    parsers['setup'].add_argument('-t', '--transform', action='append', type=str, default=[])
+
+    add_command('collect')
+
+    add_command('build')
+
+    add_command('run')
+    parsers['run'].add_argument('--auto-npm', action='store_true')
+
+    args = parser.parse_args()
+
+    if not args.which:
         DO_COLLECT = DO_BUILD = True
-    elif sys.argv[1] == 'setup':
+    elif args.which == 'setup':
         # Do one time setup stuff for the project
-        args = [
+        # Currently defaults to Babel's ES2017
+        cargs = [
             "npm", "install", "--save",
             "babel-core",
             "babel-cli",
             "babelify",
-            "babel-preset-react",
-            "babel-preset-es2015",
         ]
-        subprocess.call(args)
+        for preset in args.preset:
+            cargs.append("babel-preset-" + preset)
+        for transform in args.transform:
+            cargs.append("babel-plugin-transform-" + transform)
+
+        babelrc = {
+            "presets": args.preset,
+            "plugins": ["transform-" + t for t in args.transform],
+        }
+        json.dump(babelrc, open(".babelrc", "w"))
+        
+        subprocess.call(cargs)
         return
-    elif sys.argv[1] == 'build':
+    elif args.which == 'build':
         DO_COLLECT = DO_BUILD = True
-    elif sys.argv[1] == 'collect':
+    elif args.which == 'collect':
         DO_COLLECT = True
-    elif sys.argv[1] == 'run':
+    elif args.which == 'run':
         DO_COLLECT = DO_BUILD = DO_RUN = True
 
     # Locate the "main" Python package for the project in the current directory.
@@ -214,6 +271,10 @@ def main(argv=sys.argv):
         )
         if os.path.isdir(dirname) and has_settings:
             project_dir = dirname
+        if os.path.exists(os.path.join(dirname, 'manage.py')):
+            manage_dir = dirname
+    if not manage_dir:
+        manage_dir = os.path.abspath(".")
     
     # If we can't find the location of the project's "main" package, abort
     if not project_dir:
@@ -248,6 +309,7 @@ def main(argv=sys.argv):
         if 'index.js' in files and 'js' not in index_files:
             print('JavaScript', root)
             index_files['js'] = os.path.join(root, 'index.js')
+            js_dir = root
         if 'index.styl' in files and 'styl' not in index_files:
             print('Stylus', root)
             index_files['styl'] = os.path.join(root, 'index.styl')
@@ -259,9 +321,9 @@ def main(argv=sys.argv):
         if root.endswith('static/css'):
             print('CSS Destination', root)
             css_dir = root
-        if root.endswith('static/js'):
-            print('JS Destination', root)
-            js_dir = root
+        # if root.endswith('static/js'):
+        #     print('JS Destination', root)
+        #     js_dir = root
 
         # Register all the appropriate files to the watch list
         for fn in files:
@@ -286,7 +348,7 @@ def main(argv=sys.argv):
             except ImportError:
                 pass
             else:
-                subprocess.call(['python', 'manage.py', 'compilejsx', '-o', jsx_registry_path])
+                manage_py(['compilejsx', '-o', jsx_registry_path])
                 process_jsx(jsx_registry_path)
             collect_app_asset_src(app_asset_dirs, 'js')
 
@@ -312,7 +374,7 @@ def main(argv=sys.argv):
     # RUN
 
     if DO_RUN:
-        subprocess.Popen(['python', 'manage.py', 'runserver', '0.0.0.0:8000'])
+        manage_py(['runserver', '0.0.0.0:8000'], background=True)
 
         while 1:
             time.sleep(1)
