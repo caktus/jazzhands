@@ -193,6 +193,17 @@ def manage_py(args, background=False):
         os.chdir(cwd)
 
 
+def comma_and(args, quote=None):
+    if quote:
+        args = ['%s%s%s' % (quote, a, quote) for a in args]
+    if len(args) == 1:
+        return args[0]
+    if len(args) == 2:
+        return '%s and %s' % args
+    else:
+        return ', '.join(args[:-1]) + ', and ' + args[-1]
+
+
 def main(argv=sys.argv):
     global js_dir
     global css_dir
@@ -259,6 +270,12 @@ def main(argv=sys.argv):
         }
         if os.path.exists(".babelrc"):
             print("Refusing to overwrite existing .babelrc file. Please update it manually.")
+            if babelrc["presets"]:
+                print('Add %s to the "presets".' % comma_and(babelrc["presets"], quote='"'))
+            if babelrc["plugins"]:
+                print('Add %s to the "plugins".' % comma_and(babelrc["plugins"], quote='"'))
+            print('And install related packages with NPM:')
+            print('   %s' % ' '.join(cargs))
             sys.exit(1)
         json.dump(babelrc, open(".babelrc", "w"))
         
