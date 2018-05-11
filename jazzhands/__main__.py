@@ -242,6 +242,12 @@ def main(argv=sys.argv):
             "babel-cli",
             "babelify",
         ]
+
+        # Default presets, if none are given
+        if not args.preset:
+            args.preset = ["es2017"]
+
+        # Build list of packages to install for requested presets and transforms
         for preset in args.preset:
             cargs.append("babel-preset-" + preset)
         for transform in args.transform:
@@ -251,6 +257,9 @@ def main(argv=sys.argv):
             "presets": args.preset,
             "plugins": ["transform-" + t for t in args.transform],
         }
+        if os.path.exists(".babelrc"):
+            print("Refusing to overwrite existing .babelrc file. Please update it manually.")
+            sys.exit(1)
         json.dump(babelrc, open(".babelrc", "w"))
         
         subprocess.call(cargs)
@@ -317,13 +326,11 @@ def main(argv=sys.argv):
             print('Less', root)
             index_files['less'] = os.path.join(root, 'index.less')
 
-        # Find JS/CSS static locations for generated bundles to live
+        # Find CSS static locations for generated bundles to live, separate from Less/Stylus source
+        # The JS location is identified above, because index.js and bundle.js are together
         if root.endswith('static/css'):
             print('CSS Destination', root)
             css_dir = root
-        # if root.endswith('static/js'):
-        #     print('JS Destination', root)
-        #     js_dir = root
 
         # Register all the appropriate files to the watch list
         for fn in files:

@@ -15,7 +15,7 @@ Jazz Hands is a automatic build and dev-run tool for Django projects with modern
 You can install Jazzhands locally in the virtual environment of a Django project.
 
 ```
-pip install -e git@github.com:caktus/jazzhands.git
+pip install 'git+https://github.com/caktus/jazzhands@develop'
 ```
 
 ## Setup
@@ -24,13 +24,13 @@ Once installed
 you can install prerequisite NPM packages for ECMAScript compilation with Jazzhand's `setup`
 command.
 
-The setup command needs to know what Babel presets and transform plugins you want. As a basic recommendation you should include the `es2017` preset, which will include all the ES2017 transformations necessary. The setup will add the necessary entries to your `package.json` file as well as generate a `.babelrc` configuration file for you.
+The setup command needs to know what Babel presets and transform plugins you want. The setup will add the necessary entries to your `package.json` file as well as generate a `.babelrc` configuration file for you. You'll be given the `es2017` preset by default, which allows your Javascript modules to use all the ES2017 language features.
 
 ```
-jazzhands setup -p es2017
+jazzhands setup
 ```
 
-Multiple presets are allowed. For a React project you would add the `react` preset as well.
+One or more presets are allowed with the `-p` option. For a React project you would add the `react` preset as well as the `es2017` preset.
 
 ```
 jazzhands setup -p es2017 -p react
@@ -41,6 +41,8 @@ If you have specific language features you want to include, add them with the `-
 ```
 jazzhands setup -p es2017 -t object-rest-spread
 ```
+
+To learn more about presets and transforms you can read the Babel docs on plugins at `https://babeljs.io/docs/plugins/`.
 
 ## Collecting
 
