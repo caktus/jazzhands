@@ -380,21 +380,42 @@ def main(argv=sys.argv):
                     watch[ext][fn] = os.stat(fn).st_mtime
                     break
 
+    # We need these files at the current directory to work
+    is_npm_pkg = os.path.exists("package.json")
+    is_babel = os.path.exists(".babelrc")
+
+    # Complain if we don't see NPM configured
+    # Report about it either way if we're running the check subcommand
     if args.which == 'check':
-        is_npm_pkg = os.path.exists("package.json")
-        is_babel = os.path.exists(".babelrc")
         print("NPM configured:", yesno(is_npm_pkg))
-        if not is_npm_pkg:
-            print("  You'll need a package.json at the top of your project. Run `npm init` for help.")
+    if not is_npm_pkg:
+        print("You'll need a package.json at the top of your project. Run `npm init` for help.")
+        if args.which != 'check':
+            sys.exit(1)
+    
+    # Complain if we don't see babel configured
+    # Report about it either way if we're running the check subcommand
+    if args.which == 'check':
         print("Babel configured:", yesno(is_babel))
-        if not is_babel:
-            print("  Babel is not configured. Run `jazzhands setup` to do so automatically.")
-            print("  Run `jazzhands setup --help` if you want to customize the setup.")
+    if not is_babel:
+        print("Babel is not configured. Run `jazzhands setup` to do so automatically.")
+        print("Run `jazzhands setup --help` if you want to customize the setup.")
+        if args.which != 'check':
+            sys.exit(1)
+
+    # If we're running the check command, tell the user what top level JS, Less, and Stylus
+    # files Jazzhands will try to use.
+    if args.which == 'check':
         print("Jazzhands thinks these assets are top-level files:")
         for lang in index_files:
             print("  %s" % (index_files[lang]))
         print("If either of these are *not* a top-level file, you need to create one.")
-        sys.exit(0)
+
+        # When the check command exits, use an error code if required files were missing earlier.
+        if not is_npm_pkg or not is_babel:
+            sys.exit(1)
+        else:
+            sys.exit(0)
 
     # COLLECT
 
