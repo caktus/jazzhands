@@ -193,7 +193,16 @@ def manage_py(args, background=False):
         os.chdir(cwd)
 
 
+def yesno(check):
+    return "yes" if check else "no"
+
+
 def comma_and(args, quote=None):
+    """Helps to format lists of words with the oxford comma.
+
+    Optional `quote` parameter will also quote the items with that character.
+    """
+
     if quote:
         args = ['%s%s%s' % (quote, a, quote) for a in args]
     if len(args) == 1:
@@ -233,6 +242,8 @@ def main(argv=sys.argv):
     parsers['setup'].add_argument('-p', '--preset', action='append', type=str, default=[])
     parsers['setup'].add_argument('-t', '--transform', action='append', type=str, default=[])
 
+    add_command('check')
+
     add_command('collect')
 
     add_command('build')
@@ -246,12 +257,19 @@ def main(argv=sys.argv):
         DO_COLLECT = DO_BUILD = True
     elif args.which == 'setup':
         # Do one time setup stuff for the project
+
+        # But only if we already have a package.json
+        if not os.path.exists("package.json"):
+            print("ERROR: Jazzhands cannot be setup until you have a package.json file.")
+            print("Run `npm init` for help creating one.")
+
         # Currently defaults to Babel's ES2017
         cargs = [
             "npm", "install", "--save",
             "babel-core",
             "babel-cli",
             "babelify",
+            "browserify",
         ]
 
         # Default presets, if none are given
@@ -333,20 +351,24 @@ def main(argv=sys.argv):
 
         # Find top-level JS/Less/Stylus locations in the project
         if 'index.js' in files and 'js' not in index_files:
-            print('JavaScript', root)
+            # print('JavaScript', root)
             index_files['js'] = os.path.join(root, 'index.js')
             js_dir = root
+        elif 'site.js' in files and 'js' not in index_files:
+            # print('JavaScript', root)
+            index_files['js'] = os.path.join(root, 'site.js')
+            js_dir = root
         if 'index.styl' in files and 'styl' not in index_files:
-            print('Stylus', root)
+            # print('Stylus', root)
             index_files['styl'] = os.path.join(root, 'index.styl')
         if 'index.less' in files and 'less' not in index_files:
-            print('Less', root)
+            # print('Less', root)
             index_files['less'] = os.path.join(root, 'index.less')
 
         # Find CSS static locations for generated bundles to live, separate from Less/Stylus source
         # The JS location is identified above, because index.js and bundle.js are together
         if root.endswith('static/css'):
-            print('CSS Destination', root)
+            # print('CSS Destination', root)
             css_dir = root
 
         # Register all the appropriate files to the watch list
@@ -356,6 +378,22 @@ def main(argv=sys.argv):
                     fn = os.path.join(root, fn)
                     watch[ext][fn] = os.stat(fn).st_mtime
                     break
+
+    if args.which == 'check':
+        is_npm_pkg = os.path.exists("package.json")
+        is_babel = os.path.exists(".babelrc")
+        print("NPM configured:", yesno(is_npm_pkg))
+        if not is_npm_pkg:
+            print("  You'll need a package.json at the top of your project. Run `npm init` for help.")
+        print("Babel configured:", yesno(is_babel))
+        if not is_babel:
+            print("  Babel is not configured. Run `jazzhands setup` to do so automatically.")
+            print("  Run `jazzhands setup --help` if you want to customize the setup.")
+        print("Jazzhands thinks these assets are top-level files:")
+        for lang in index_files:
+            print("  %s" % (index_files[lang]))
+        print("If either of these are *not* a top-level file, you need to create one.")
+        sys.exit(0)
 
     # COLLECT
 
@@ -393,6 +431,13 @@ def main(argv=sys.argv):
             sys.exit(1)
 
         if index_files['js'] and js_dir:
+            if not os.path.exists('.babelrc'):
+                print("ERROR: Javascript found, but babel is not configured.")
+                print("To fix, install babel in this project:")
+                print("    jazzhands setup")
+                print("This will update your package.json and add .babelrc, so look at the changes"
+                    "and commit them appropriately.")
+                sys.exit(1)
             build_js(app_asset_dirs)
 
     # RUN
