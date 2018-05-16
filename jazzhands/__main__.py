@@ -262,6 +262,7 @@ def main(argv=sys.argv):
         if not os.path.exists("package.json"):
             print("ERROR: Jazzhands cannot be setup until you have a package.json file.")
             print("Run `npm init` for help creating one.")
+            sys.exit(1)
 
         # Currently defaults to Babel's ES2017
         cargs = [
