@@ -1,10 +1,15 @@
+from __future__ import print_function
+
 import os
 import re
 from shutil import rmtree, copytree
 import subprocess
 import sys
 import time
+import json
 from warnings import warn
+
+import argparse
 
 
 lang_dir_names = {
@@ -26,6 +31,9 @@ watch = {
 }
 
 app_asset_dirs = {}
+
+manage_dir = None
+project_dir = None
 
 
 def pull_app_assets(from_path, to_path, copy=False):
@@ -65,7 +73,8 @@ def _process_jsx(fp):
 
     if fp.endswith('.js'):
         babel_bin = './node_modules/.bin/babel'
-        args = [babel_bin, '--presets=react,es2015', fp, '-o', fp]
+        # args '--presets=react,es2015',
+        args = [babel_bin, fp, '-o', fp]
         if not os.path.exists(babel_bin):
             print("ERROR: Javascript found, but babel is not installed.")
             print("To fix, install babel in this project:")
@@ -150,14 +159,14 @@ def build_less(dirs):
 def build_js(dirs):
     print("Building JS")
     args = ['./node_modules/.bin/browserify']
-    args.extend("-t [ babelify --presets [ react es2015 ] ]".split())
+    args.extend("-t [ babelify ]".split())
     args.extend([index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')])
     proc = subprocess.Popen(args, stderr=subprocess.PIPE)
     out, err = proc.communicate()
 
     if proc.returncode > 0:
         # Experimental "auto install" feature for missing NPM dependencies during development
-        if '--auto-npm' in sys.argv:
+        if args.auto_npm:
             warn("--auto-npm is an experimental feature and maybe a bad idea. It might go away soon.")
             err = err.decode('ascii')
             match = re.search(r"Cannot find module '(.*)' from", err)
@@ -171,9 +180,44 @@ def build_js(dirs):
             print(err.decode('utf8'))
 
 
+def manage_py(args, background=False):
+    cwd = os.getcwd()
+    os.chdir(manage_dir)
+    try:
+        if background:
+            return subprocess.Popen(['python', 'manage.py'] + args)
+        else:
+            return subprocess.call(['python', 'manage.py'] + args)
+    finally:
+        os.chdir(cwd)
+
+
+def yesno(check):
+    return "yes" if check else "no"
+
+
+def comma_and(args, quote=None):
+    """Helps to format lists of words with the oxford comma.
+
+    Optional `quote` parameter will also quote the items with that character.
+    """
+
+    if quote:
+        args = ['%s%s%s' % (quote, a, quote) for a in args]
+    if len(args) == 1:
+        return args[0]
+    if len(args) == 2:
+        return '%s and %s' % args
+    else:
+        return ', '.join(args[:-1]) + ', and ' + args[-1]
+
+
 def main(argv=sys.argv):
     global js_dir
     global css_dir
+    global project_dir
+    global manage_dir
+    global args
 
     DO_COLLECT = False
     DO_BUILD = False
@@ -184,25 +228,82 @@ def main(argv=sys.argv):
     # collect, build, run or the setup command.
     # build implies collect, run implies build and collect. setup runs on its own.
 
-    if len(sys.argv) <= 1:
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(which=None)
+    # parser.add_argument('command', type=str, action='store')
+    subparsers = parser.add_subparsers()
+    parsers = {}
+    def add_command(cmd):
+        parsers[cmd] = subparsers.add_parser(cmd)
+        parsers[cmd].set_defaults(which=cmd)
+
+    add_command('setup')
+    parsers['setup'].add_argument('-p', '--preset', action='append', type=str, default=[])
+    parsers['setup'].add_argument('-t', '--transform', action='append', type=str, default=[])
+
+    add_command('check')
+
+    add_command('collect')
+
+    add_command('build')
+
+    add_command('run')
+    parsers['run'].add_argument('--auto-npm', action='store_true')
+
+    args = parser.parse_args()
+
+    if not args.which:
         DO_COLLECT = DO_BUILD = True
-    elif sys.argv[1] == 'setup':
+    elif args.which == 'setup':
         # Do one time setup stuff for the project
-        args = [
+
+        # But only if we already have a package.json
+        if not os.path.exists("package.json"):
+            print("ERROR: Jazzhands cannot be setup until you have a package.json file.")
+            print("Run `npm init` for help creating one.")
+            sys.exit(1)
+
+        # Currently defaults to Babel's ES2017
+        cargs = [
             "npm", "install", "--save",
             "babel-core",
             "babel-cli",
             "babelify",
-            "babel-preset-react",
-            "babel-preset-es2015",
+            "browserify",
         ]
-        subprocess.call(args)
+
+        # Default presets, if none are given
+        if not args.preset:
+            args.preset = ["es2017"]
+
+        # Build list of packages to install for requested presets and transforms
+        for preset in args.preset:
+            cargs.append("babel-preset-" + preset)
+        for transform in args.transform:
+            cargs.append("babel-plugin-transform-" + transform)
+
+        babelrc = {
+            "presets": args.preset,
+            "plugins": ["transform-" + t for t in args.transform],
+        }
+        if os.path.exists(".babelrc"):
+            print("Refusing to overwrite existing .babelrc file. Please update it manually.")
+            if babelrc["presets"]:
+                print('Add %s to the "presets".' % comma_and(babelrc["presets"], quote='"'))
+            if babelrc["plugins"]:
+                print('Add %s to the "plugins".' % comma_and(babelrc["plugins"], quote='"'))
+            print('And install related packages with NPM:')
+            print('   %s' % ' '.join(cargs))
+            sys.exit(1)
+        json.dump(babelrc, open(".babelrc", "w"))
+        
+        subprocess.call(cargs)
         return
-    elif sys.argv[1] == 'build':
+    elif args.which == 'build':
         DO_COLLECT = DO_BUILD = True
-    elif sys.argv[1] == 'collect':
+    elif args.which == 'collect':
         DO_COLLECT = True
-    elif sys.argv[1] == 'run':
+    elif args.which == 'run':
         DO_COLLECT = DO_BUILD = DO_RUN = True
 
     # Locate the "main" Python package for the project in the current directory.
@@ -214,6 +315,10 @@ def main(argv=sys.argv):
         )
         if os.path.isdir(dirname) and has_settings:
             project_dir = dirname
+        if os.path.exists(os.path.join(dirname, 'manage.py')):
+            manage_dir = dirname
+    if not manage_dir:
+        manage_dir = os.path.abspath(".")
     
     # If we can't find the location of the project's "main" package, abort
     if not project_dir:
@@ -246,22 +351,25 @@ def main(argv=sys.argv):
 
         # Find top-level JS/Less/Stylus locations in the project
         if 'index.js' in files and 'js' not in index_files:
-            print('JavaScript', root)
+            # print('JavaScript', root)
             index_files['js'] = os.path.join(root, 'index.js')
+            js_dir = root
+        elif 'site.js' in files and 'js' not in index_files:
+            # print('JavaScript', root)
+            index_files['js'] = os.path.join(root, 'site.js')
+            js_dir = root
         if 'index.styl' in files and 'styl' not in index_files:
-            print('Stylus', root)
+            # print('Stylus', root)
             index_files['styl'] = os.path.join(root, 'index.styl')
         if 'index.less' in files and 'less' not in index_files:
-            print('Less', root)
+            # print('Less', root)
             index_files['less'] = os.path.join(root, 'index.less')
 
-        # Find JS/CSS static locations for generated bundles to live
+        # Find CSS static locations for generated bundles to live, separate from Less/Stylus source
+        # The JS location is identified above, because index.js and bundle.js are together
         if root.endswith('static/css'):
-            print('CSS Destination', root)
+            # print('CSS Destination', root)
             css_dir = root
-        if root.endswith('static/js'):
-            print('JS Destination', root)
-            js_dir = root
 
         # Register all the appropriate files to the watch list
         for fn in files:
@@ -270,6 +378,43 @@ def main(argv=sys.argv):
                     fn = os.path.join(root, fn)
                     watch[ext][fn] = os.stat(fn).st_mtime
                     break
+
+    # We need these files at the current directory to work
+    is_npm_pkg = os.path.exists("package.json")
+    is_babel = os.path.exists(".babelrc")
+
+    # Complain if we don't see NPM configured
+    # Report about it either way if we're running the check subcommand
+    if args.which == 'check':
+        print("NPM configured:", yesno(is_npm_pkg))
+    if not is_npm_pkg:
+        print("You'll need a package.json at the top of your project. Run `npm init` for help.")
+        if args.which != 'check':
+            sys.exit(1)
+    
+    # Complain if we don't see babel configured
+    # Report about it either way if we're running the check subcommand
+    if args.which == 'check':
+        print("Babel configured:", yesno(is_babel))
+    if not is_babel:
+        print("Babel is not configured. Run `jazzhands setup` to do so automatically.")
+        print("Run `jazzhands setup --help` if you want to customize the setup.")
+        if args.which != 'check':
+            sys.exit(1)
+
+    # If we're running the check command, tell the user what top level JS, Less, and Stylus
+    # files Jazzhands will try to use.
+    if args.which == 'check':
+        print("Jazzhands thinks these assets are top-level files:")
+        for lang in index_files:
+            print("  %s" % (index_files[lang]))
+        print("If either of these are *not* a top-level file, you need to create one.")
+
+        # When the check command exits, use an error code if required files were missing earlier.
+        if not is_npm_pkg or not is_babel:
+            sys.exit(1)
+        else:
+            sys.exit(0)
 
     # COLLECT
 
@@ -286,7 +431,7 @@ def main(argv=sys.argv):
             except ImportError:
                 pass
             else:
-                subprocess.call(['python', 'manage.py', 'compilejsx', '-o', jsx_registry_path])
+                manage_py(['compilejsx', '-o', jsx_registry_path])
                 process_jsx(jsx_registry_path)
             collect_app_asset_src(app_asset_dirs, 'js')
 
@@ -307,12 +452,19 @@ def main(argv=sys.argv):
             sys.exit(1)
 
         if index_files['js'] and js_dir:
+            if not os.path.exists('.babelrc'):
+                print("ERROR: Javascript found, but babel is not configured.")
+                print("To fix, install babel in this project:")
+                print("    jazzhands setup")
+                print("This will update your package.json and add .babelrc, so look at the changes"
+                    "and commit them appropriately.")
+                sys.exit(1)
             build_js(app_asset_dirs)
 
     # RUN
 
     if DO_RUN:
-        subprocess.Popen(['python', 'manage.py', 'runserver', '0.0.0.0:8000'])
+        manage_py(['runserver', '0.0.0.0:8000'], background=True)
 
         while 1:
             time.sleep(1)
