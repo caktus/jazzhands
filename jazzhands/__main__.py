@@ -161,7 +161,6 @@ def build_js(dirs):
     args = ['./node_modules/.bin/browserify']
     args.extend("-t [ babelify ]".split())
     args.extend([index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')])
-    print(args)
     proc = subprocess.Popen(args, stderr=subprocess.PIPE)
     out, err = proc.communicate()
 
