@@ -158,15 +158,15 @@ def build_less(dirs):
 
 def build_js(dirs):
     print("Building JS")
-    args = ['./node_modules/.bin/browserify']
-    args.extend("-t [ babelify ]".split())
-    args.extend([index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')])
-    proc = subprocess.Popen(args, stderr=subprocess.PIPE)
+    cargs = ['./node_modules/.bin/browserify']
+    cargs.extend("-t [ babelify ]".split())
+    cargs.extend([index_files['js'], '-o', os.path.join(js_dir, 'bundle.js')])
+    proc = subprocess.Popen(cargs, stderr=subprocess.PIPE)
     out, err = proc.communicate()
 
     if proc.returncode > 0:
         # Experimental "auto install" feature for missing NPM dependencies during development
-        if args.auto_npm:
+        if getattr(args, 'auto_npm', False):
             warn("--auto-npm is an experimental feature and maybe a bad idea. It might go away soon.")
             err = err.decode('ascii')
             match = re.search(r"Cannot find module '(.*)' from", err)
@@ -246,6 +246,7 @@ def main(argv=sys.argv):
     add_command('collect')
 
     add_command('build')
+    parsers['build'].add_argument('--auto-npm', action='store_true')
 
     add_command('run')
     parsers['run'].add_argument('--auto-npm', action='store_true')
